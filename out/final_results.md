@@ -1,0 +1,3 @@
+epoch : 20
+Train loss: 0.2863898844015083 | Train acc: 0.8673166666666666
+Test loss: 0.29786123422383187 | Test acc: 0.8618
