@@ -29,7 +29,7 @@ nn.train(
     lr=1e-2,
     X_test=X_test_flat,
     y_test=y_test_enc,
-    result_path="models/",
+    result_path="models/micronn",
 )
 
 print("Training finished successfully!")

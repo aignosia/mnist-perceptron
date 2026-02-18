@@ -24,7 +24,7 @@ class Layer:
     def _compute_outputs(self, X: np.ndarray):
         B_W = np.concatenate((self.B, self.W), axis=1)
         X_prime = np.concatenate((np.ones((X.shape[0], 1)), X), axis=1).T
-        out = (B_W @ X_prime).T
+        out = np.matmul(B_W, X_prime).T
         return self.activation.function(out)  # Transpose to make like y
 
     def compute_outputs(self, X: np.ndarray):
@@ -42,8 +42,8 @@ class Layer:
         self, inputs: np.ndarray, out_grads: np.ndarray, batch: int
     ):
         activation_grads = self.activation.gradient(self.out, out_grads)
-        self.grads["W"] = (inputs.T @ activation_grads) / batch
-        self.grads["B"] = (np.ones((1, batch)) @ activation_grads) / batch
+        self.grads["W"] = np.matmul(inputs.T, activation_grads) / batch
+        self.grads["B"] = np.matmul(np.ones((1, batch)), activation_grads) / batch
 
     def adjust_weights(self, lr: float):
         if self.grads["W"].size and self.grads["B"].size == 0:

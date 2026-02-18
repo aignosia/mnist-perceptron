@@ -25,7 +25,7 @@ class NN:
                 self.layers[i].input_size = self.layers[i - 1].size
             self.layers[i].initialize_layer()
         self.loss_func = loss_func
-        self.results = []
+        self.results = {"lr": 0, "batch": 0, "results": []}
 
     def _forward(self, X: np.ndarray):
         input = X.copy()
@@ -39,7 +39,7 @@ class NN:
         for layer, input in zip(reversed(self.layers), reversed(inputs)):
             layer.compute_gradients(input, out_grads, batch=y.shape[0])
             layer.adjust_weights(lr)
-            out_grads = out_grads @ layer.W
+            out_grads = np.matmul(out_grads, layer.W)
 
     def compute_loss(self, y: np.ndarray, y_pred: np.ndarray):
         return self.loss_func.function(y, y_pred)
@@ -63,6 +63,7 @@ class NN:
     ):
         if batch > X_train.shape[0]:
             raise Exception("batch size is bigger than training variables number.")
+        self.results["lr"], self.results["batch"] = lr, batch
         for i in range(epoch):
             for j in range(0, X_train.shape[0], batch):
                 s, e = j, min(j + batch, X_train.shape[0])
@@ -80,14 +81,12 @@ class NN:
             )
             result = {
                 "epoch": i + 1,
-                "lr": lr,
-                "batch": batch,
                 "train_loss": train_loss,
                 "train_acc": train_acc,
                 "test_loss": test_loss,
                 "test_acc": test_acc,
             }
-            self.results.append(result)
+            self.results["results"].append(result)  # ty:ignore[unresolved-attribute]
             result_dir = Path(result_path).joinpath(f"micronn_{i + 1}")
             self.save_results(result_dir)
 
