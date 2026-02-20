@@ -8,4 +8,8 @@ def one_hot_encode(digit: int):
 
 
 def accuracy_score(y: np.ndarray, y_pred: np.ndarray):
-    return np.mean(np.argmax(y, axis=1) == np.argmax(y_pred, axis=1))
+    return np.mean(np.argmax(y, axis=1) == np.argmax(y_pred, axis=1)) * 100
+
+
+def manual_seed(seed):
+    np.random.seed(seed)

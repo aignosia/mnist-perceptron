@@ -4,45 +4,39 @@ from pathlib import Path
 
 import numpy as np
 
-from micronn.activations import Softmax
-
-from .layer import Layer
-from .loss import CrossEntropy, Loss
+from .layer import Layer, LinearLayer, SoftmaxLayer
+from .loss import CrossEntropyLoss, Loss
 from .utils import accuracy_score
 
 
 class NN:
-    def __init__(self, layers: list[Layer], loss_func: Loss):
-        if layers[0].input_size is None:
-            raise Exception("You must provide input size for the first layer.")
-        if isinstance(loss_func, CrossEntropy) and not isinstance(
-            layers[-1].activation, Softmax
+    def __init__(self, layers: list[Layer], loss_fn: Loss):
+        if isinstance(loss_fn, CrossEntropyLoss) and not isinstance(
+            layers[-1], SoftmaxLayer
         ):
             raise Exception("Only softmax is supported for cross-entropy loss.")
         self.layers = layers
-        for i in range(len(self.layers)):
-            if i > 0:
-                self.layers[i].input_size = self.layers[i - 1].size
-            self.layers[i].initialize_layer()
-        self.loss_func = loss_func
+        self.loss_fn = loss_fn
         self.results = {"lr": 0, "batch": 0, "results": []}
 
     def _forward(self, X: np.ndarray):
         input = X.copy()
         for layer in self.layers:
-            layer.compute_outputs(input)
-            input = layer.out
+            input = layer.compute_outputs(input)
 
     def _backward(self, X: np.ndarray, y: np.ndarray, lr: float):
-        out_grads = self.loss_func.gradient(y, self.layers[-1].out)
+        grads = self.loss_fn.compute_grad(y, self.layers[-1].out)
+        if isinstance(self.loss_fn, CrossEntropyLoss):
+            grads = self.loss_fn.compute_grad(y, self.layers[-2].out)
         inputs = [X] + [layer.out for layer in self.layers[:-1]]
         for layer, input in zip(reversed(self.layers), reversed(inputs)):
-            layer.compute_gradients(input, out_grads, batch=y.shape[0])
-            layer.adjust_weights(lr)
-            out_grads = np.matmul(out_grads, layer.W)
+            in_grads = layer.compute_gradients(grads)
+            if isinstance(layer, LinearLayer):
+                layer.adjust_weights(input, grads, lr)
+            grads = in_grads
 
     def compute_loss(self, y: np.ndarray, y_pred: np.ndarray):
-        return self.loss_func.function(y, y_pred)
+        return self.loss_fn.compute(y, y_pred)
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         out = X.copy()
@@ -54,7 +48,7 @@ class NN:
         self,
         X_train: np.ndarray,
         y_train: np.ndarray,
-        epoch: int,
+        epochs: int,
         batch: int,
         lr: float,
         X_test: np.ndarray,
@@ -64,31 +58,24 @@ class NN:
         if batch > X_train.shape[0]:
             raise Exception("batch size is bigger than training variables number.")
         self.results["lr"], self.results["batch"] = lr, batch
-        for i in range(epoch):
+        for i in range(epochs):
             for j in range(0, X_train.shape[0], batch):
                 s, e = j, min(j + batch, X_train.shape[0])
                 self._forward(X_train[s:e])
                 self._backward(X_train[s:e], y_train[s:e], lr)
             y_train_pred, y_test_pred = self.predict(X_train), self.predict(X_test)
-            train_loss = self.compute_loss(y_train, y_train_pred)
-            test_loss = self.compute_loss(y_test, y_test_pred)
-            train_acc = accuracy_score(y_train, y_train_pred) * 100
-            test_acc = accuracy_score(y_test, y_test_pred) * 100
+            res = {"epoch": i + 1, "loss_function": type(self.loss_fn).__name__}
+            res["train_loss"] = self.compute_loss(y_train, y_train_pred)
+            res["test_loss"] = self.compute_loss(y_test, y_test_pred)
+            res["train_acc"] = accuracy_score(y_train, y_train_pred)
+            res["test_acc"] = accuracy_score(y_test, y_test_pred)
             print(
                 f"epoch : {i + 1}"
-                + f"\n  Train loss: {train_loss:.2f} | Train acc.: {train_acc:.2f}"
-                + f"\n  Test loss:  {test_loss:.2f} | Test acc.:  {test_acc:.2f}"
+                + f"\n  Train loss: {res['train_loss']:.4f} | Train acc.: {res['train_acc']:.4f}"
+                + f"\n  Test loss:  {res['test_loss']:.4f} | Test acc.:  {res['test_acc']:.4f}"
             )
-            result = {
-                "epoch": i + 1,
-                "train_loss": train_loss,
-                "train_acc": train_acc,
-                "test_loss": test_loss,
-                "test_acc": test_acc,
-            }
-            self.results["results"].append(result)  # ty:ignore[unresolved-attribute]
-            result_dir = Path(result_path).joinpath(f"micronn_{i + 1}")
-            self.save_results(result_dir)
+            self.results["results"].append(res)  # ty:ignore[unresolved-attribute]
+        self.save_results(Path(result_path).joinpath(f"micronn_{epochs}"))
 
     def save_results(self, path: Path):
         path.mkdir(parents=True, exist_ok=True)
