@@ -17,7 +17,7 @@ class NN:
             raise Exception("Only softmax is supported for cross-entropy loss.")
         self.layers = layers
         self.loss_fn = loss_fn
-        self.results = {"lr": 0, "batch": 0, "results": []}
+        self.results = {"lr": 0, "batch": 0, "loss_function": None, "results": []}
 
     def _forward(self, X: np.ndarray):
         input = X.copy()
@@ -58,13 +58,14 @@ class NN:
         if batch > X_train.shape[0]:
             raise Exception("batch size is bigger than training variables number.")
         self.results["lr"], self.results["batch"] = lr, batch
+        self.results["loss_function"] = type(self.loss_fn).__name__
         for i in range(epochs):
             for j in range(0, X_train.shape[0], batch):
                 s, e = j, min(j + batch, X_train.shape[0])
                 self._forward(X_train[s:e])
                 self._backward(X_train[s:e], y_train[s:e], lr)
             y_train_pred, y_test_pred = self.predict(X_train), self.predict(X_test)
-            res = {"epoch": i + 1, "loss_function": type(self.loss_fn).__name__}
+            res = {"epoch": i + 1}
             res["train_loss"] = self.compute_loss(y_train, y_train_pred)
             res["test_loss"] = self.compute_loss(y_test, y_test_pred)
             res["train_acc"] = accuracy_score(y_train, y_train_pred)
