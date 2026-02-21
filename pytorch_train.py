@@ -75,7 +75,7 @@ def main():
                 + f"\n  Test loss:  {test_loss:.4f} | Test acc.:  {test_acc:.4f}"
             )
             res = {
-                "epoch": epoch,
+                "epoch": epoch + 1,
                 "train_loss": loss.item(),
                 "train_acc": acc,
                 "test_loss": test_loss.item(),
@@ -83,7 +83,7 @@ def main():
             }
             results["results"].append(res)
 
-    path = base_path.joinpath(f"pytorch_{epochs}")
+    path = base_path.joinpath("pytorch")
     path.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), path.joinpath("model.pkl"))
     with open(path.joinpath("results.json"), "w") as f:

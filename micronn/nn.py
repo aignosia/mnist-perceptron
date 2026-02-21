@@ -70,16 +70,16 @@ class NN:
                 + f"\n  Test loss:  {res['test_loss']:.4f} | Test acc.:  {res['test_acc']:.4f}"
             )
             self.results["results"].append(res)  # ty:ignore[unresolved-attribute]
-        self.save_results(Path(result_path).joinpath(f"micronn_{epochs}"))
+        self.save(Path(result_path))
 
-    def save_results(self, path: Path):
+    def save(self, path: Path):
         path.mkdir(parents=True, exist_ok=True)
         with open(path.joinpath("results.json"), "w") as f:
             json.dump(self.results, f, indent=2)
         with open(path.joinpath("layers.pkl"), "wb") as f:
             pickle.dump(self.layers, f)
 
-    def load_layers(self, path: Path):
+    def load(self, path: Path):
         if not path.exists:
             raise FileNotFoundError(f"File {path} does not exist.")
         with open(path, "rb") as f:

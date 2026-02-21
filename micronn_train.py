@@ -43,7 +43,7 @@ def main():
         lr=1e-2,
         X_test=X_test,
         y_test=y_test,
-        result_path="models",
+        result_path="models/micronn",
     )
     print("Training finished successfully!")
 
