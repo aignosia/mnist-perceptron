@@ -4,17 +4,13 @@ from pathlib import Path
 
 import numpy as np
 
-from .layer import Layer, LinearLayer, SoftmaxLayer
-from .loss import CrossEntropyLoss, Loss
+from .layer import Layer, LinearLayer
+from .loss import Loss
 from .utils import accuracy_score
 
 
 class NN:
     def __init__(self, layers: list[Layer], loss_fn: Loss):
-        if isinstance(loss_fn, CrossEntropyLoss) and not isinstance(
-            layers[-1], SoftmaxLayer
-        ):
-            raise Exception("Only softmax is supported for cross-entropy loss.")
         self.layers = layers
         self.loss_fn = loss_fn
         self.results = {"lr": 0, "batch": 0, "loss_function": None, "results": []}
@@ -26,8 +22,6 @@ class NN:
 
     def _backward(self, X: np.ndarray, y: np.ndarray, lr: float):
         grads = self.loss_fn.compute_grad(y, self.layers[-1].out)
-        if isinstance(self.loss_fn, CrossEntropyLoss):
-            grads = self.loss_fn.compute_grad(y, self.layers[-2].out)
         inputs = [X] + [layer.out for layer in self.layers[:-1]]
         for layer, input in zip(reversed(self.layers), reversed(inputs)):
             in_grads = layer.compute_gradients(grads)
@@ -67,8 +61,8 @@ class NN:
             y_train_pred, y_test_pred = self.predict(X_train), self.predict(X_test)
             res = {"epoch": i + 1}
             res["train_loss"] = self.compute_loss(y_train, y_train_pred)
-            res["test_loss"] = self.compute_loss(y_test, y_test_pred)
             res["train_acc"] = accuracy_score(y_train, y_train_pred)
+            res["test_loss"] = self.compute_loss(y_test, y_test_pred)
             res["test_acc"] = accuracy_score(y_test, y_test_pred)
             print(
                 f"epoch : {i + 1}"

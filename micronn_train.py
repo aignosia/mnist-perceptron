@@ -31,7 +31,7 @@ def main():
     print("Setting model...")
     manual_seed(42)
     nn = NN(
-        [l.LinearLayer(size=10, input_size=784), l.SoftmaxLayer()],
+        [l.LinearLayer(size=10, input_size=784)],
         CrossEntropyLoss(),
     )
     print("Training model...")
