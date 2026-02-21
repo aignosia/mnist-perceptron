@@ -57,14 +57,7 @@ class SigmoidLayer:
         return out_grads * self.out * (1 - self.out)
 
 
-class SoftmaxLayer:
-    def predict(self, X: np.ndarray):
-        exp = np.exp(X - X.max(axis=1, keepdims=True))
-        sum = exp.sum(axis=1, keepdims=True)
-        return exp / sum
-
-    def compute_outputs(self, X: np.ndarray):
-        self.out = self.predict(X)
-
-    def compute_gradients(self, out_grads: np.ndarray):
-        return out_grads
+def softmax(self, X: np.ndarray):
+    exp = np.exp(X - X.max(axis=1, keepdims=True))
+    sum = exp.sum(axis=1, keepdims=True)
+    return exp / sum

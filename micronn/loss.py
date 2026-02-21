@@ -14,7 +14,7 @@ class CrossEntropyLoss:
         return diff - np.log(np.exp(diff).sum(axis=1, keepdims=True))
 
     def compute(self, y: np.ndarray, y_pred: np.ndarray):
-        return np.sum(-(y * self._log_softmax(y_pred)).sum(axis=1)) / y.shape[0]
+        return np.sum(-(y * self._log_softmax(y_pred))).item() / y.shape[0]
 
     def compute_grad(self, y: np.ndarray, y_pred: np.ndarray):
         return np.exp(self._log_softmax(y_pred)) - y
@@ -22,7 +22,7 @@ class CrossEntropyLoss:
 
 class L2Loss:
     def compute(self, y: np.ndarray, y_pred: np.ndarray):
-        return np.sum(np.power(y_pred - y, 2)) / y.shape[0]
+        return np.sum(np.power(y_pred - y, 2)).item() / y.shape[0]
 
     def compute_grad(self, y: np.ndarray, y_pred: np.ndarray):
         return y_pred - y
