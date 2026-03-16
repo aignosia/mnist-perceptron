@@ -5,7 +5,7 @@ training and inference script for simple neural networks. It leverages only
 NumPy's fast computation for matrix operations, but each matrix operation
 can be coded manually if wanted.
 
-The `micronn_train.py` file is a script that can be used to train a one
+The `micronn.py` file is a script that can be used to train a one
 layer perceptron on the MNIST dataset using softmax as activation layer and
 cross-entropy as loss function. There is also the `pytorch_train.py` file
 which is a script for training the same model used for benchmark.
@@ -34,17 +34,17 @@ can achieve good results.
 
 ### Prerequisites
 
-* Python 3.11 (preferred) or above
+- Python 3.11 (preferred) or above
 
 ### Installation
 
-* Cloning the repo
+- Cloning the repo
 
 ```bash
 git clone https://github.com/aignosia/mnist-perceptron.git
 ```
 
-* Creating and activating virtual environment
+- Creating and activating virtual environment
 
 ```bash
 # uv
@@ -55,10 +55,10 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
-* Installing dependencies
+- Installing dependencies
 
 ```bash
-# uv 
+# uv
 uv sync --locked
 # Other Python installation
 pip install -r requirements.txt
@@ -70,23 +70,21 @@ and PyTorch manually.
 ### Inference
 
 The trained model can be tested by instantiating a `NN()` object, loading
-the `.pkl` file with `.load("path/to/model")` then using `.predict()` to
+the `.pkl` file with pickle then using `forward()` to
 make inference on your data.
 
 Example of testing script :
 
 ```python
+# inference.py
 import numpy as np
-from micronn import NN
-from micron.loss import CrossEntropyLoss
-from micron.layer import softmax
+from micronn import NN, forward
 
 # Load your data here
 
-nn = NN([], CrossEntropyLoss())
-nn.load("models/micronn/layers.pkl")
+model = pickle.load("models/micronn/model.pkl")
 
-y_logits = nn.predict(X) # X is an array of shape (784, 1)
+y_logits = forward(X).layers[-1].out # X is an array of shape (784, 1)
 y_pred = softmax(y_logits).argmax(axis=1)
 print(y_pred)
 ```
@@ -95,4 +93,4 @@ print(y_pred)
 
 You can replicate the results obtained by downloading a NPZ version of the
 MNIST dataset, copying it to `data/mnist.npz` and by running the
-`micronn_train.py` script.
+`micronn.py` script.
