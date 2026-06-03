@@ -101,12 +101,11 @@ def forward(model: NN, X: np.ndarray) -> NN:
 
 def backward(model: NN, X: np.ndarray, loss: Loss, lr: float) -> NN:
     out_model, grads = copy.deepcopy(model), loss.grads
-    _X = [X] + [e.out for e in out_model.layers[:-1]]
-    for i in range(len(out_model.layers) - 1, -1, -1):
-        layer = out_model.layers[i]
+    reversed_inputs = [e.out for e in reversed(out_model.layers[:-1])] + [X]
+    for layer, input in zip(reversed(out_model.layers), reversed_inputs):
         layer.grads = compute_layer_gradient(layer, grads)
         if isinstance(layer, Linear):
-            layer.W, layer.B = adjust_weights(layer, _X[i], grads, lr)
+            layer.W, layer.B = adjust_weights(layer, input, grads, lr)
         grads = layer.grads
     return out_model
 
@@ -157,7 +156,7 @@ for epoch in range(epochs):
     res["test_loss"], res["test_acc"] = test_loss.loss, test_acc
     results["results"].append(res)
 print("Saving results...")
-base_path = Path("models/micronn")
+base_path = Path("models/micronn_ex")
 base_path.mkdir(parents=True, exist_ok=True)
 pickle.dump(model, open(base_path.joinpath("model.pkl"), "wb"))
 json.dump(results, open(base_path.joinpath("results.json"), "w"), indent=2)
