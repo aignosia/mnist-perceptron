@@ -1,6 +1,7 @@
 import copy
 import json
 import pickle
+from functools import singledispatch
 from pathlib import Path
 from typing import Callable
 
@@ -9,35 +10,72 @@ import numpy as np
 
 class Linear:
     def __init__(self, input_size: int, size: int):
-        if size <= 0 or input_size <= 0:
-            raise Exception("Layer size or input size can't be negative or null.")
-        self.W = np.random.normal(0.0, 1.0, (size, input_size))
-        self.B = np.random.normal(0.0, 1.0, (size, 1))
+        self.input_size = input_size
+        self.size = size
+        self.B = np.random.normal(0, 1, size=(size, 1))
+        self.W = np.random.normal(0, 1, size=(size, input_size))
+        self.out = np.empty(0)
+        self.grads = np.empty(0)
 
 
 class Activation:
-    def __init__(self, func: Callable, grad: Callable):
+    def __init__(self, func: Callable, grad_func: Callable):
         self.func = func
-        self.grad = grad
+        self.grad_func = grad_func
+        self.out = np.empty(0)
+        self.grads = np.empty(0)
 
 
-class Layer:
-    out: np.ndarray
+@singledispatch
+def compute_layer_output(arg):
+    return arg
 
-    def __init__(self, linear: Linear, activation: Activation | None = None):
-        self.linear = linear
-        self.activation = activation
+
+@compute_layer_output.register
+def _(layer: Linear, X: np.ndarray) -> np.ndarray:
+    B_W = np.concatenate((layer.B, layer.W), axis=1)
+    X_prime = np.concatenate((np.ones((X.shape[0], 1)), X), axis=1).T
+    return np.matmul(B_W, X_prime).T
+
+
+@compute_layer_output.register
+def _(layer: Activation, X: np.ndarray) -> np.ndarray:
+    return layer.func(X)
+
+
+@singledispatch
+def compute_layer_gradient(arg):
+    return arg
+
+
+@compute_layer_gradient.register
+def _(layer: Linear, out_grads: np.ndarray) -> np.ndarray:
+    return np.matmul(out_grads, layer.W)
+
+
+@compute_layer_gradient.register
+def _(layer: Activation, out_grads: np.ndarray) -> np.ndarray:
+    return layer.grad_func(layer, out_grads)
+
+
+def adjust_weights(
+    layer: Linear, X: np.ndarray, grads: np.ndarray, lr: float
+) -> tuple[np.ndarray, np.ndarray]:
+    W_grads = np.matmul(X.T, grads) / X.shape[0]
+    B_grads = np.matmul(np.ones((1, X.shape[0])), grads) / X.shape[0]
+    W, B = layer.W - lr * W_grads.T, layer.B - lr * B_grads.T
+    return W, B
 
 
 class Loss:
     def __init__(self, name: str, loss: np.ndarray, grad: np.ndarray):
         self.name = name
         self.loss = loss
-        self.grad = grad
+        self.grads = grad
 
 
 class NN:
-    def __init__(self, *layers: Layer):
+    def __init__(self, *layers: Linear | Activation):
         self.layers = list(layers)
 
 
@@ -46,36 +84,31 @@ def softmax(X: np.ndarray):
     return exp / exp.sum(axis=1, keepdims=True)
 
 
-def cross_entropy_loss(y_logits: np.ndarray, y_pred: np.ndarray) -> Loss:
-    diff = y_pred - y_pred.max(axis=1, keepdims=True)
+def cross_entropy_loss(y: np.ndarray, y_logits: np.ndarray) -> Loss:
+    diff = y_logits - y_logits.max(axis=1, keepdims=True)
     log_softmax = diff - np.log(np.exp(diff).sum(axis=1, keepdims=True))
-    loss = np.sum(-(y_logits * log_softmax)).item() / y_logits.shape[0]
-    return Loss("Cross-Entropy", loss, np.exp(log_softmax) - y_logits)
+    loss = np.sum(-(y * log_softmax)).item() / y.shape[0]
+    return Loss("Cross-Entropy", loss, np.exp(log_softmax) - y)
 
 
-def forward(nn: NN, X: np.ndarray) -> NN:
-    out_nn, out = copy.deepcopy(nn), X.copy()
-    for layer in out_nn.layers:
-        B_W = np.concatenate((layer.linear.B, layer.linear.W), axis=1)
-        X_prime = np.concatenate((np.ones((out.shape[0], 1)), out), axis=1).T
-        out = np.matmul(B_W, X_prime).T
-        out = layer.activation.func(out) if layer.activation else out
-        layer.out = out
-    return out_nn
+def forward(model: NN, X: np.ndarray) -> NN:
+    out_model, out = copy.deepcopy(model), X
+    for layer in out_model.layers:
+        layer.out = compute_layer_output(layer, out)
+        out = layer.out
+    return out_model
 
 
-def backward(nn: NN, X: np.ndarray, y: np.ndarray, loss: Loss, lr: float) -> NN:
-    out_nn, grads = copy.deepcopy(nn), loss.grad
-    _X = [X] + [e.out for e in out_nn.layers[:-1]]
-    for layer, input in zip(reversed(out_nn.layers), reversed(_X)):
-        grads = layer.activation.grad(layer, grads) if layer.activation else grads
-        in_grads = np.matmul(grads, layer.linear.W)
-        W_grads = np.matmul(input.T, grads) / X.shape[0]
-        B_grads = np.matmul(np.ones((1, input.shape[0])), grads) / input.shape[0]
-        layer.linear.W = layer.linear.W - lr * W_grads.T
-        layer.linear.B = layer.linear.B - lr * B_grads.T
-        grads = in_grads
-    return out_nn
+def backward(model: NN, X: np.ndarray, loss: Loss, lr: float) -> NN:
+    out_model, grads = copy.deepcopy(model), loss.grads
+    _X = [X] + [e.out for e in out_model.layers[:-1]]
+    for i in range(len(out_model.layers) - 1, -1, -1):
+        layer = out_model.layers[i]
+        layer.grads = compute_layer_gradient(layer, grads)
+        if isinstance(layer, Linear):
+            layer.W, layer.B = adjust_weights(layer, _X[i], grads, lr)
+        grads = layer.grads
+    return out_model
 
 
 def one_hot_encode(digit: int) -> list:
@@ -100,18 +133,18 @@ X_test = data["x_test"].reshape(data["x_test"].shape[0], -1)
 y_test = np.array([np.array(one_hot_encode(y)) for y in data["y_test"]])
 print("Setting model...")
 manual_seed(42)
-model = NN(Layer(Linear(784, 10)))
+model = NN(Linear(784, 10))
 loss_fn, lr, epochs, batch = cross_entropy_loss, 1e-2, 5, 128
-results, res = {"lr": lr, "batch": batch, "loss_function": "", "results": []}, {}
+results = {"lr": lr, "batch": batch, "loss_function": "", "results": []}
 print("Training model...")
 for epoch in range(epochs):
     for i in range(0, X_train.shape[0], batch):
         e = min(i + batch, X_train.shape[0])
         X_batch, y_batch = X_train[i:e], y_train[i:e]
         model = forward(model, X_batch)
-        batch_loss = loss_fn(y_batch, forward(model, X_batch).layers[-1].out)
-        model = backward(model, X_batch, y_batch, batch_loss, lr)
-    results["loss_function"] = batch_loss.name
+        batch_loss = loss_fn(y_batch, model.layers[-1].out)
+        model = backward(model, X_batch, batch_loss, lr)
+    results["loss_function"], res = batch_loss.name, {}
     y_logits = forward(model, X_train).layers[-1].out
     y_test_logits = forward(model, X_test).layers[-1].out
     y_pred, y_test_pred = softmax(y_logits), softmax(y_test_logits)
@@ -122,9 +155,9 @@ for epoch in range(epochs):
     print(print_res)
     res["epoch"], res["loss"], res["acc"] = epoch + 1, loss.loss, acc
     res["test_loss"], res["test_acc"] = test_loss.loss, test_acc
-    results["results"].append(res)  # ty:ignore[unresolved-attribute]
+    results["results"].append(res)
 print("Saving results...")
 base_path = Path("models/micronn")
 base_path.mkdir(parents=True, exist_ok=True)
 pickle.dump(model, open(base_path.joinpath("model.pkl"), "wb"))
-json.dump(results, open(base_path.joinpath("results.json"), "w"))
+json.dump(results, open(base_path.joinpath("results.json"), "w"), indent=2)
