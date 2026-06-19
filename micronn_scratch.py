@@ -15,24 +15,34 @@ class CTensor(ct.Structure):
     ]
 
 
-clib.c_init_tensor.argtypes = (
+clib.init_ctensor.argtypes = (
     ct.POINTER(CTensor),
     ct.POINTER(ct.c_float),
     ct.POINTER(ct.c_size_t),
     ct.c_size_t,
 )
-clib.c_init_tensor.restype = None
+clib.init_ctensor.restype = None
 clib.ctensor_element.argtypes = (ct.POINTER(CTensor), ct.Array)
 clib.ctensor_element.restype = ct.POINTER(ct.c_float)
-clib.c_tensor_bin_op.argtypes = (
+clib.ctensor_binop.argtypes = (
     ct.POINTER(CTensor),
     ct.POINTER(CTensor),
     ct.POINTER(CTensor),
     ct.c_char,
 )
-clib.c_tensor_bin_op.restype = None
-# clib.c_tensor_dot.argtypes = (ct.CTensor, ct.CTensor)
-# clib.c_tensor_dot.restype = None
+clib.ctensor_binop.restype = None
+clib.ctensor_dot_resshape.argtypes = (
+    ct.POINTER(ct.c_size_t),
+    ct.POINTER(CTensor),
+    ct.POINTER(CTensor),
+)
+clib.ctensor_dot_resshape.restype = None
+clib.ctensor_dot.argtypes = (
+    ct.POINTER(CTensor),
+    ct.POINTER(CTensor),
+    ct.POINTER(CTensor),
+)
+clib.ctensor_dot.restype = None
 
 
 def flatten_list(ndim_list: list) -> list:
@@ -56,7 +66,7 @@ def create_ctensor(value: list) -> CTensor:
         tensor_shape.append(len(test_value))
         if isinstance(test_value[0], list):
             for e in test_value:
-                if not isinstance(e, list) or len(e) != tensor_shape[-1]:
+                if not isinstance(e, list) or len(e) != len(test_value[0]):
                     raise Exception("The tensor can't have inconsistent shape.")
         test_value = test_value[0]
     flattened_value = flatten_list(value)
@@ -69,7 +79,7 @@ def create_ctensor(value: list) -> CTensor:
         (ct.c_size_t * len(tensor_shape))(*tensor_shape),
         ct.POINTER(ct.c_size_t),
     )
-    clib.c_init_tensor(
+    clib.init_ctensor(
         ct.byref(tensor), tensor_value, tensor_shape, ct.c_size_t(tensor_ndim)
     )
     return tensor
@@ -83,8 +93,15 @@ def get_ctensor_element(tensor: CTensor, idx: tuple):
 
 class Tensor:
     def __init__(self, value: list):
-        self.size = len(value)
         self._ctensor = create_ctensor(value)
+
+    @property
+    def size(self):
+        return int(self._ctensor.od_size)
+
+    @property
+    def shape(self):
+        return list(self._ctensor.shape)
 
     def __getitem__(self, idx: tuple):
         return get_ctensor_element(self._ctensor, idx)
@@ -94,64 +111,86 @@ class Tensor:
             yield self._ctensor.value[i]
 
     def __add__(self, other: Tensor) -> Tensor:
-        result = Tensor([])
+        res = Tensor([])
         ct.memmove(
-            result._ctensor.value,
+            res._ctensor.value,
             self._ctensor.value,
             ct.sizeof(self._ctensor.value),
         )
-        result._ctensor.shape = self._ctensor.shape
-        result._ctensor.ndim = self._ctensor.ndim
-        result._ctensor.od_size = self._ctensor.od_size
+        res._ctensor.shape = self._ctensor.shape
+        res._ctensor.ndim = self._ctensor.ndim
+        res._ctensor.od_size = self._ctensor.od_size
         clib.c_tensor_bin_op(
-            ct.byref(result._ctensor),
+            ct.byref(res._ctensor),
             ct.byref(self._ctensor),
             ct.byref(other._ctensor),
             ct.c_char(b"+"),
         )
-        return result
+        return res
 
     def __sub__(self, other: Tensor) -> Tensor:
-        result = Tensor([])
+        res = Tensor([])
         ct.memmove(
-            result._ctensor.value,
+            res._ctensor.value,
             self._ctensor.value,
             ct.sizeof(self._ctensor.value),
         )
-        result._ctensor.shape = self._ctensor.shape
-        result._ctensor.ndim = self._ctensor.ndim
-        result._ctensor.od_size = self._ctensor.od_size
+        res._ctensor.shape = self._ctensor.shape
+        res._ctensor.ndim = self._ctensor.ndim
+        res._ctensor.od_size = self._ctensor.od_size
         clib.c_tensor_bin_op(
-            ct.byref(result._ctensor),
+            ct.byref(res._ctensor),
             ct.byref(self._ctensor),
             ct.byref(other._ctensor),
             ct.c_char(b"-"),
         )
-        return result
+        return res
 
     def __mul__(self, other: Tensor) -> Tensor:
-        result = Tensor([])
+        res = Tensor([])
         ct.memmove(
-            result._ctensor.value,
+            res._ctensor.value,
             self._ctensor.value,
             ct.sizeof(self._ctensor.value),
         )
-        result._ctensor.shape = self._ctensor.shape
-        result._ctensor.ndim = self._ctensor.ndim
-        result._ctensor.od_size = self._ctensor.od_size
-        clib.c_tensor_bin_op(
-            ct.byref(result._ctensor),
+        res._ctensor.shape = self._ctensor.shape
+        res._ctensor.ndim = self._ctensor.ndim
+        res._ctensor.od_size = self._ctensor.od_size
+        clib.c_tensor_binop(
+            ct.byref(res._ctensor),
             ct.byref(self._ctensor),
             ct.byref(other._ctensor),
             ct.c_char(b"*"),
         )
-        return result
+        return res
 
 
-# def tensor_dot(t1: Tensor, t2: Tensor) -> Tensor:
-#     if t1.size != t2.size:
-#         raise Exception("Tensors have the different lengths.")
-#     return clib.matmul(t1._ctensor, t2._ctensor)
+def tensor_dot(A: Tensor, B: Tensor):
+    res = Tensor([])
+    res._ctensor.ndim = A._ctensor.ndim
+    ct.memmove(
+        res._ctensor.shape, A._ctensor.shape, ct.sizeof(A._ctensor.shape)
+    )
+    res._ctensor.shape = (ct.c_size_t * res._ctensor.ndim)()
+    clib.ctensor_dot_resshape(
+        res._ctensor.shape, ct.byref(A._ctensor), ct.byref(B._ctensor)
+    )
+    res._ctensor.od_size = 1
+    for i in range(A._ctensor.ndim):
+        res._ctensor.od_size *= res._ctensor.shape[i]
+    ct.memmove(
+        res._ctensor.value,
+        A._ctensor.value,
+        res._ctensor.od_size * ct.sizeof(ct.c_float),
+    )
+    for i in range(res._ctensor.od_size):
+        res._ctensor.value[i] = 0
+    clib.ctensor_dot(
+        ct.byref(res._ctensor),
+        ct.byref(A._ctensor),
+        ct.byref(B._ctensor),
+    )
+    return res
 
 
 # class Linear:
